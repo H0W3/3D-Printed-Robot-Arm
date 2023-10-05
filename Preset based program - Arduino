@@ -1,0 +1,183 @@
+#include <AccelStepper.h>
+#include <Servo.h>
+
+int presets[][6][6] = {
+  {
+    {0, 0, 0, 0, 0, 1},
+    {0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 1},
+    {0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 1},
+    {0, 0, 0, 0, 0, 0}
+  },
+  {
+    {0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 1}
+  },
+  {
+    {0, 0, 0, 0, 0, 1},
+    {0, 0, 0, 0, 0, 0},
+    {0, -0, 0, 0, 0, 1}
+  },
+  {
+    {0, 0, 0, 0, 0, 1},
+    {0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 1}
+  }
+};
+
+int currentPreset = 0;
+int currentStage = 0;
+
+int steps1, steps2, steps3, steps4, steps5;
+int gripperState = 0;
+
+int pulPin1 = 6;
+int dirPin1 = 7;
+int pulPin2 = 28;
+int dirPin2 = 26;
+int pulPin3 = 33;
+int dirPin3 = 31;
+int pulPin4 = 10;
+int dirPin4 = 11;
+int pulPin5 = 2;
+int dirPin5 = 3;
+int servoPin = 40;
+
+AccelStepper stepper1(AccelStepper::DRIVER, pulPin1, dirPin1);
+AccelStepper stepper2(AccelStepper::DRIVER, pulPin2, dirPin2);
+AccelStepper stepper3(AccelStepper::DRIVER, pulPin3, dirPin3);
+AccelStepper stepper4(AccelStepper::DRIVER, pulPin4, dirPin4);
+AccelStepper stepper5(AccelStepper::DRIVER, pulPin5, dirPin5);
+Servo gripperServo;
+
+bool runPreset = false;
+
+void setup() {
+  pinMode(13, OUTPUT);
+
+  pinMode(pulPin1, OUTPUT);
+  pinMode(dirPin1, OUTPUT);
+  pinMode(pulPin2, OUTPUT);
+  pinMode(dirPin2, OUTPUT);
+  pinMode(pulPin3, OUTPUT);
+  pinMode(dirPin3, OUTPUT);
+  pinMode(pulPin4, OUTPUT);
+  pinMode(dirPin4, OUTPUT);
+  pinMode(pulPin5, OUTPUT);
+  pinMode(dirPin5, OUTPUT);
+
+  stepper1.setMaxSpeed(1000);
+  stepper1.setAcceleration(500);
+  stepper2.setMaxSpeed(1000);
+  stepper2.setAcceleration(500);
+  stepper3.setMaxSpeed(1000);
+  stepper3.setAcceleration(500);
+  stepper4.setMaxSpeed(1000);
+  stepper4.setAcceleration(500);
+  stepper5.setMaxSpeed(1000);
+  stepper5.setAcceleration(500);
+
+  stepper1.setCurrentPosition(0);
+  stepper2.setCurrentPosition(0);
+  stepper3.setCurrentPosition(0);
+  stepper4.setCurrentPosition(0);
+  stepper5.setCurrentPosition(0);
+
+  gripperServo.attach(servoPin);
+  gripperServo.write(0);
+
+  Serial.begin(9600);
+}
+
+void loop() {
+  if (Serial.available() > 0) {
+    String receivedString = Serial.readStringUntil('\n');
+    receivedString.trim();
+
+    if (receivedString.startsWith("preset ")) {
+      int presetIndex = receivedString.substring(7).toInt();
+      if (presetIndex >= 1 && presetIndex <= sizeof(presets) / sizeof(presets[0])) {
+        currentPreset = presetIndex - 1;
+        currentStage = 0;
+        runPreset = true;
+      } else {
+        Serial.println("Invalid preset index.");
+      }
+    } else if (receivedString == "reset") {
+      resetMotors();
+      gripperServo.write(0);
+      gripperState = 0;
+    } else {
+      Serial.println("Invalid input. Enter 'preset <index>' to run a preset or 'reset' to reset the motors.");
+    }
+  }
+
+  if (runPreset) {
+
+    if (currentStage < sizeof(presets[currentPreset]) / sizeof(presets[currentPreset][0])) {
+
+      steps1 = presets[currentPreset][currentStage][0] / 1.8 * 20 * 4;
+      steps2 = presets[currentPreset][currentStage][1] / 1.8 * 20 * 4;
+      steps3 = presets[currentPreset][currentStage][2] / 1.8 * 20 * 4;
+      steps4 = presets[currentPreset][currentStage][3] / 1.8 * 13 * 4;
+      steps5 = presets[currentPreset][currentStage][4] / 1.8 * 4;
+
+
+      stepper1.moveTo(steps1);
+      stepper2.moveTo(steps2);
+      stepper3.moveTo(steps3);
+      stepper4.moveTo(steps4);
+      stepper5.moveTo(steps5);
+
+
+      if (stepper1.distanceToGo() == 0 && stepper2.distanceToGo() == 0 &&
+          stepper3.distanceToGo() == 0 && stepper4.distanceToGo() == 0 &&
+          stepper5.distanceToGo() == 0) {
+
+        if (presets[currentPreset][currentStage][5] == 0) {
+          gripperServo.write(0);
+          gripperState = 0;
+        } else if (presets[currentPreset][currentStage][5] == 1) {
+          gripperServo.write(180);
+          gripperState = 1;
+        }
+        delay(900);
+
+        currentStage++;
+        if (currentStage >= sizeof(presets[currentPreset]) / sizeof(presets[currentPreset][0])) {
+          Serial.println("Preset completed.");
+          runPreset = false;
+        }
+      }
+    }
+  }
+
+
+  stepper1.run();
+  stepper2.run();
+  stepper3.run();
+  stepper4.run();
+  stepper5.run();
+}
+
+void resetMotors() {
+  stepper1.moveTo(0);
+  stepper2.moveTo(0);
+  stepper3.moveTo(0);
+  stepper4.moveTo(0);
+  stepper5.moveTo(0);
+  
+
+  while (stepper1.distanceToGo() != 0 || stepper2.distanceToGo() != 0 ||
+         stepper3.distanceToGo() != 0 || stepper4.distanceToGo() != 0 ||
+         stepper5.distanceToGo() != 0) {
+    stepper1.run();
+    stepper2.run();
+    stepper3.run();
+    stepper4.run();
+    stepper5.run();
+  }
+  
+  Serial.println("Motors reset to 0 degrees.");
+}
