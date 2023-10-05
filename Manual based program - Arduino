@@ -1,0 +1,289 @@
+#include <AccelStepper.h>
+
+int angle1, angle2, angle3, angle4, angle5;
+int steps1, steps2, steps3, steps4, steps5;
+
+int pulPin1 = 6;
+int dirPin1 = 7;
+int pulPin2 = 28;
+int dirPin2 = 26;
+int pulPin3 = 33;
+int dirPin3 = 31;
+int pulPin4 = 10;
+int dirPin4 = 11;
+int pulPin5 = 2;
+int dirPin5 = 3;
+
+AccelStepper stepper1(AccelStepper::DRIVER, pulPin1, dirPin1);
+AccelStepper stepper2(AccelStepper::DRIVER, pulPin2, dirPin2);
+AccelStepper stepper3(AccelStepper::DRIVER, pulPin3, dirPin3);
+AccelStepper stepper4(AccelStepper::DRIVER, pulPin4, dirPin4);
+AccelStepper stepper5(AccelStepper::DRIVER, pulPin5, dirPin5);
+
+enum MotorState {
+  IDLE,
+  MOVING,
+  STOPPED
+};
+
+MotorState motorState = IDLE;
+
+struct AngleSet {
+  int angle1, angle2, angle3, angle4, angle5;
+};
+
+AngleSet angleSets[10];  // Maximum number of sets of angles
+int setCount = 0;
+bool executing = false;
+int setsToExecute = 0; // Number of angle sets to execute
+
+AngleSet preset1[] = {
+  {38, 54, 128, 95, 0},
+  {-55, -61, 58, 129, 0},
+  {-145, 24, -75, 108, 0},
+  {0, 0, 0, 0, 0}
+};
+
+bool containsLetter(const String &str) {
+  for (int i = 0; i < str.length(); i++) {
+    if (isAlpha(str.charAt(i))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void setup() {
+  pinMode(13, OUTPUT);
+
+  pinMode(pulPin1, OUTPUT);
+  pinMode(dirPin1, OUTPUT);
+  pinMode(pulPin2, OUTPUT);
+  pinMode(dirPin2, OUTPUT);
+  pinMode(pulPin3, OUTPUT);
+  pinMode(dirPin3, OUTPUT);
+  pinMode(pulPin4, OUTPUT);
+  pinMode(dirPin4, OUTPUT);
+  pinMode(pulPin5, OUTPUT);
+  pinMode(dirPin5, OUTPUT);
+
+  stepper1.setMaxSpeed(1000);
+  stepper1.setAcceleration(500);
+  stepper2.setMaxSpeed(1000);
+  stepper2.setAcceleration(500);
+  stepper3.setMaxSpeed(1000);
+  stepper3.setAcceleration(500);
+  stepper4.setMaxSpeed(1000);
+  stepper4.setAcceleration(500);
+  stepper5.setMaxSpeed(1000);
+  stepper5.setAcceleration(500);
+
+  stepper1.setCurrentPosition(0);
+  stepper2.setCurrentPosition(0);
+  stepper3.setCurrentPosition(0);
+  stepper4.setCurrentPosition(0);
+  stepper5.setCurrentPosition(0);
+
+  Serial.begin(9600);  // Set baud rate to match the serial monitor
+}
+
+void loop() {
+  if (executing) {
+    // Check if any motor is still moving
+    if (motorState == MOVING) {
+      if (stepper1.distanceToGo() == 0 && stepper2.distanceToGo() == 0 &&
+          stepper3.distanceToGo() == 0 && stepper4.distanceToGo() == 0 &&
+          stepper5.distanceToGo() == 0) {
+        // All motors have reached their desired positions, set the state to IDLE
+        motorState = IDLE;
+        setCount++;  // Move to the next set of angles
+        if (setCount < setsToExecute) {
+          executeNextAngleSet();
+        } else {
+          executing = false;
+          Serial.println("All entered angle sets executed.");
+          resetAngleSets(); // Reset angle sets after execution
+        }
+      }
+    }
+  } else {
+    if (Serial.available()) {
+      String receivedString = Serial.readString();  // Read the string from serial communication
+      receivedString.trim();  // Remove leading and trailing whitespaces
+
+      if (receivedString.equalsIgnoreCase("done")) {
+        int enteredSets = executingSetsCount();
+        if (enteredSets > 0) {
+          setsToExecute = enteredSets; // Set the number of sets to execute
+          // Start executing the entered sets of angles
+          Serial.print("Executing ");
+          Serial.print(setsToExecute);
+          Serial.println(" entered angle sets...");
+          setCount = 0;
+          executing = true;
+          executeNextAngleSet();
+        } else {
+          Serial.println("No angle sets entered.");
+        }
+      } else if (receivedString.startsWith("preset")) {
+        // Parse the preset number
+        int presetNumber = receivedString.substring(7).toInt();
+        if (presetNumber == 1) {
+          Serial.println("Executing preset 1...");
+          executePreset(preset1);
+        } else {
+          Serial.println("Invalid preset number.");
+        }
+      } else if (receivedString.equalsIgnoreCase("stop")) {
+        stopMotors();
+      } else if (receivedString.equalsIgnoreCase("reset")) {
+        resetMotors();
+      } else {
+        // Check if the received string contains any letters
+        if (!containsLetter(receivedString)) {
+          // Check if the string contains 5 values/terms and does not contain "\n"
+          int spaceCount = 0;
+          bool containsNewline = false;
+          for (int i = 0; i < receivedString.length(); i++) {
+            if (receivedString.charAt(i) == ' ') {
+              spaceCount++;
+            }
+            if (receivedString.charAt(i) == '\n') {
+              containsNewline = true;
+              break;
+            }
+          }
+
+          if (!containsNewline && spaceCount == 4) {
+            // Split the string into separate integers
+            sscanf(receivedString.c_str(), "%d %d %d %d %d", &angle1, &angle2, &angle3, &angle4, &angle5);
+
+            if (setCount < 10) {
+              // Store the set of angles
+              angleSets[setCount].angle1 = angle1;
+              angleSets[setCount].angle2 = angle2;
+              angleSets[setCount].angle3 = angle3;
+              angleSets[setCount].angle4 = angle4;
+              angleSets[setCount].angle5 = angle5;
+              setCount++;
+              Serial.print("Angles set ");
+              Serial.print(setCount);
+              Serial.println(" stored.");
+            } else {
+              Serial.println("Maximum number of angle sets reached.");
+            }
+          } else {
+            Serial.print("Invalid command\n");
+            // Invalid command
+            digitalWrite(13, HIGH);
+            delay(250);
+
+            digitalWrite(13, LOW);
+            delay(400);
+
+            digitalWrite(13, HIGH);
+            delay(400);
+
+            digitalWrite(13, LOW);
+            delay(400);
+
+            digitalWrite(13, HIGH);
+            delay(400);
+
+            digitalWrite(13, LOW);
+            delay(400);
+          }
+        } else {
+          Serial.print("Line contains letters, ignoring\n");
+        }
+      }
+    }
+  }
+
+  // Move the motors
+  stepper1.run();
+  stepper2.run();
+  stepper3.run();
+  stepper4.run();
+  stepper5.run();
+}
+
+void executeNextAngleSet() {
+  angle1 = angleSets[setCount].angle1;
+  angle2 = angleSets[setCount].angle2;
+  angle3 = angleSets[setCount].angle3;
+  angle4 = angleSets[setCount].angle4;
+  angle5 = angleSets[setCount].angle5;
+
+  steps1 = angle1 / 1.8 * 20 * 4;
+  steps2 = angle2 / 1.8 * 20 * 4;
+  steps3 = angle3 / 1.8 * 20 * 4;
+  steps4 = angle4 / 1.8 * 13 * 4;
+  steps5 = angle5 / 1.8 * 4;
+
+  // Move to the desired positions
+  stepper1.moveTo(steps1);
+  stepper2.moveTo(steps2);
+  stepper3.moveTo(steps3);
+  stepper4.moveTo(steps4);
+  stepper5.moveTo(steps5);
+
+  // Set the motor state to MOVING
+  motorState = MOVING;
+  Serial.print("Executing angles set ");
+  Serial.println(setCount + 1);
+}
+
+void executePreset(AngleSet preset[]) {
+  setCount = 0;
+  executing = true;
+  setsToExecute = 4; // Number of angle sets in the preset
+  for (int i = 0; i < setsToExecute; i++) {
+    angleSets[i] = preset[i];
+  }
+  executeNextAngleSet();
+}
+
+void stopMotors() {
+  stepper1.stop();
+  stepper2.stop();
+  stepper3.stop();
+  stepper4.stop();
+  stepper5.stop();
+  motorState = STOPPED;
+  Serial.println("Motors stopped.");
+}
+
+void resetMotors() {
+  stepper1.moveTo(0);
+  stepper2.moveTo(0);
+  stepper3.moveTo(0);
+  stepper4.moveTo(0);
+  stepper5.moveTo(0);
+  motorState = MOVING;
+  Serial.println("Resetting motors to 0 degrees.");
+}
+
+void resetAngleSets() {
+  for (int i = 0; i < 10; i++) {
+    angleSets[i].angle1 = 0;
+    angleSets[i].angle2 = 0;
+    angleSets[i].angle3 = 0;
+    angleSets[i].angle4 = 0;
+    angleSets[i].angle5 = 0;
+  }
+  setCount = 0;
+  Serial.println("Angle sets reset.");
+}
+
+int executingSetsCount() {
+  int count = 0;
+  for (int i = 0; i < 10; i++) {
+    if (angleSets[i].angle1 != 0 || angleSets[i].angle2 != 0 ||
+        angleSets[i].angle3 != 0 || angleSets[i].angle4 != 0 ||
+        angleSets[i].angle5 != 0) {
+      count++;
+    }
+  }
+  return count;
+}
