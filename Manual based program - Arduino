@@ -32,10 +32,10 @@ struct AngleSet {
   int angle1, angle2, angle3, angle4, angle5;
 };
 
-AngleSet angleSets[10];  // Maximum number of sets of angles
+AngleSet angleSets[10];
 int setCount = 0;
 bool executing = false;
-int setsToExecute = 0; // Number of angle sets to execute
+int setsToExecute = 0;
 
 AngleSet preset1[] = {
   {38, 54, 128, 95, 0},
@@ -84,38 +84,35 @@ void setup() {
   stepper4.setCurrentPosition(0);
   stepper5.setCurrentPosition(0);
 
-  Serial.begin(9600);  // Set baud rate to match the serial monitor
+  Serial.begin(9600);
 }
 
 void loop() {
   if (executing) {
-    // Check if any motor is still moving
     if (motorState == MOVING) {
       if (stepper1.distanceToGo() == 0 && stepper2.distanceToGo() == 0 &&
           stepper3.distanceToGo() == 0 && stepper4.distanceToGo() == 0 &&
           stepper5.distanceToGo() == 0) {
-        // All motors have reached their desired positions, set the state to IDLE
         motorState = IDLE;
-        setCount++;  // Move to the next set of angles
+        setCount++;
         if (setCount < setsToExecute) {
           executeNextAngleSet();
         } else {
           executing = false;
           Serial.println("All entered angle sets executed.");
-          resetAngleSets(); // Reset angle sets after execution
+          resetAngleSets();
         }
       }
     }
   } else {
     if (Serial.available()) {
-      String receivedString = Serial.readString();  // Read the string from serial communication
-      receivedString.trim();  // Remove leading and trailing whitespaces
+      String receivedString = Serial.readString();
+      receivedString.trim();
 
       if (receivedString.equalsIgnoreCase("done")) {
         int enteredSets = executingSetsCount();
         if (enteredSets > 0) {
-          setsToExecute = enteredSets; // Set the number of sets to execute
-          // Start executing the entered sets of angles
+          setsToExecute = enteredSets;
           Serial.print("Executing ");
           Serial.print(setsToExecute);
           Serial.println(" entered angle sets...");
@@ -126,7 +123,6 @@ void loop() {
           Serial.println("No angle sets entered.");
         }
       } else if (receivedString.startsWith("preset")) {
-        // Parse the preset number
         int presetNumber = receivedString.substring(7).toInt();
         if (presetNumber == 1) {
           Serial.println("Executing preset 1...");
@@ -139,9 +135,8 @@ void loop() {
       } else if (receivedString.equalsIgnoreCase("reset")) {
         resetMotors();
       } else {
-        // Check if the received string contains any letters
+
         if (!containsLetter(receivedString)) {
-          // Check if the string contains 5 values/terms and does not contain "\n"
           int spaceCount = 0;
           bool containsNewline = false;
           for (int i = 0; i < receivedString.length(); i++) {
@@ -155,11 +150,9 @@ void loop() {
           }
 
           if (!containsNewline && spaceCount == 4) {
-            // Split the string into separate integers
             sscanf(receivedString.c_str(), "%d %d %d %d %d", &angle1, &angle2, &angle3, &angle4, &angle5);
 
             if (setCount < 10) {
-              // Store the set of angles
               angleSets[setCount].angle1 = angle1;
               angleSets[setCount].angle2 = angle2;
               angleSets[setCount].angle3 = angle3;
@@ -174,7 +167,6 @@ void loop() {
             }
           } else {
             Serial.print("Invalid command\n");
-            // Invalid command
             digitalWrite(13, HIGH);
             delay(250);
 
@@ -200,7 +192,6 @@ void loop() {
     }
   }
 
-  // Move the motors
   stepper1.run();
   stepper2.run();
   stepper3.run();
@@ -221,14 +212,12 @@ void executeNextAngleSet() {
   steps4 = angle4 / 1.8 * 13 * 4;
   steps5 = angle5 / 1.8 * 4;
 
-  // Move to the desired positions
   stepper1.moveTo(steps1);
   stepper2.moveTo(steps2);
   stepper3.moveTo(steps3);
   stepper4.moveTo(steps4);
   stepper5.moveTo(steps5);
 
-  // Set the motor state to MOVING
   motorState = MOVING;
   Serial.print("Executing angles set ");
   Serial.println(setCount + 1);
@@ -237,7 +226,7 @@ void executeNextAngleSet() {
 void executePreset(AngleSet preset[]) {
   setCount = 0;
   executing = true;
-  setsToExecute = 4; // Number of angle sets in the preset
+  setsToExecute = 4;
   for (int i = 0; i < setsToExecute; i++) {
     angleSets[i] = preset[i];
   }
