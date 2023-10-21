@@ -37,13 +37,6 @@ int setCount = 0;
 bool executing = false;
 int setsToExecute = 0;
 
-AngleSet preset1[] = {
-  {38, 54, 128, 95, 0},
-  {-55, -61, 58, 129, 0},
-  {-145, 24, -75, 108, 0},
-  {0, 0, 0, 0, 0}
-};
-
 bool containsLetter(const String &str) {
   for (int i = 0; i < str.length(); i++) {
     if (isAlpha(str.charAt(i))) {
@@ -122,20 +115,11 @@ void loop() {
         } else {
           Serial.println("No angle sets entered.");
         }
-      } else if (receivedString.startsWith("preset")) {
-        int presetNumber = receivedString.substring(7).toInt();
-        if (presetNumber == 1) {
-          Serial.println("Executing preset 1...");
-          executePreset(preset1);
-        } else {
-          Serial.println("Invalid preset number.");
-        }
       } else if (receivedString.equalsIgnoreCase("stop")) {
         stopMotors();
       } else if (receivedString.equalsIgnoreCase("reset")) {
         resetMotors();
       } else {
-
         if (!containsLetter(receivedString)) {
           int spaceCount = 0;
           bool containsNewline = false;
